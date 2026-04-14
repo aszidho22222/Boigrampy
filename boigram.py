@@ -13,8 +13,8 @@ CORS(app)
 # ১. ফায়ারবেজ কনফিগারেশন (আপনার তথ্য দিয়ে পরিবর্তন করবেন)
 # ====================================================================
 
-FIREBASE_WEB_API_KEY = "AIzaSyA0bpUzrk_umoC1MymKfhV2_XXXXXXX" # আপনার Web API Key
-FIREBASE_DB_URL = "https://e-book-bd-41a42-default-rtdb.asia-southeast1.firebasedatabase.app"
+FIREBASE_WEB_API_KEY = "AIzaSyA0bpUzrk_umoC1MymKfhV2_x_qd7WfDwk" # আপনার Web API Key
+FIREBASE_DB_URL = "https://e-book-bd-41a42-default-rtdb.asia-southeast1.firebasedatabase.app/"
 SERVICE_ACCOUNT_FILE = 'serviceAccountKey.json' 
 
 try:
