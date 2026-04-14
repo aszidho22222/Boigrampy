@@ -9,25 +9,21 @@ from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_text = f"স্বাগতম {update.effective_user.first_name}! 👋\nআমাদের বটে আপনাকে পেয়ে আমরা আনন্দিত।"
-    await update.message.reply_text(welcome_text)
-
 # ==========================================
 # 1. CONFIGURATIONS & SECURITY SECRETS
 # ==========================================
 app = Flask(__name__)
-# ফন্টএন্ড থেকে সব রিকোয়েস্ট অ্যালাউ করার জন্য CORS
+# ফ্রন্টএন্ড থেকে সব রিকোয়েস্ট অ্যালাও করার জন্য CORS
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # সিক্রেট কি (JWT টোকেন তৈরি করার জন্য)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'super-secret-boigram-key-2024')
 
-# টেলিগ্রাম বট কনফিগারেশন (এপিআই কি এবং চ্যাট আইডি বসানো হয়েছে)
+# টেলিগ্রাম বট কনফিগারেশন
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8742123220:AAFXBJgG9kQ5he7IHz1P3C7oWQsDFeI0RKQ')
 TELEGRAM_ADMIN_CHAT_ID = os.environ.get('TELEGRAM_ADMIN_CHAT_ID', '6334878772')
 
-# ডেটাবেজ ফাইলের নাম
+# ডাটাবেজ ফাইলের নাম
 DB_FILE = 'database.json'
 
 # ==========================================
@@ -35,7 +31,7 @@ DB_FILE = 'database.json'
 # ==========================================
 db_lock = threading.Lock()
 db_data = {
-    "__auth__": {}, # ইউজারদের ইমেইল ও পাসওয়ার্ড হ্যাশ সেভ রাখার জন্য
+    "__auth__": {},
     "users": {},
     "writers": {},
     "affiliates": {},
@@ -94,7 +90,6 @@ def set_ref(path, value):
 def deep_update(d, u):
     for k, v in u.items():
         if isinstance(v, dict) and k in d and isinstance(d[k], dict):
-            # Firebase increment check
             if "_isIncrement" in v or ".sv" in v:
                 amount = v.get('value', v.get('amount', 0))
                 d[k] = d.get(k, 0) + amount
@@ -125,21 +120,19 @@ def update_ref(path, updates):
 # ==========================================
 # 3. TELEGRAM BOT ENGINE (Background Task)
 # ==========================================
-def send_telegram_message(text):
-    # বটটি যেন কাজ করে তাই এই লাইনটি কমেন্ট করে দেওয়া হলো (ডিলিট করা হয়নি)
-    # if TELEGRAM_BOT_TOKEN == '8742123220:AAFXBJgG9kQ5he7IHz1P3C7oWQsDFeI0RKQ': return
-    
+def send_telegram_message(text, chat_id=None):
+    # যদি স্পেসিফিক চ্যাট আইডি না থাকে, তবে অ্যাডমিনের কাছে পাঠাবে
+    if chat_id is None:
+        chat_id = TELEGRAM_ADMIN_CHAT_ID
+        
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_ADMIN_CHAT_ID, "text": text, "parse_mode": "HTML"}
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     try:
         requests.post(url, json=payload, timeout=5)
     except:
         pass
 
 def telegram_polling_loop():
-    # বটটি যেন কাজ করে তাই এই লাইনটি কমেন্ট করে দেওয়া হলো (ডিলিট করা হয়নি)
-    # if TELEGRAM_BOT_TOKEN == '8742123220:AAFXBJgG9kQ5he7IHz1P3C7oWQsDFeI0RKQ': return
-    
     offset = None
     while True:
         try:
@@ -151,22 +144,32 @@ def telegram_polling_loop():
                 for update in res["result"]:
                     offset = update["update_id"] + 1
                     if "message" in update and "text" in update["message"]:
-                        chat_id = update["message"]["chat"]["id"]
-                        text = update["message"]["text"]
+                        chat_id = str(update["message"]["chat"]["id"])
+                        text = update["message"]["text"].strip()
+                        lower_text = text.lower()
+                        first_name = update["message"]["from"].get("first_name", "User")
                         
-                        # শুধুমাত্র এডমিন কমান্ড দিতে পারবে
-                        if str(chat_id) == str(TELEGRAM_ADMIN_CHAT_ID):
-                            if text == "/start":
-                                send_telegram_message("🤖 <b>Boigram System Bot</b> চালু হয়েছে!\nকমান্ডস: /stats, /pending_books")
-                            elif text == "/stats":
-                                stats = f"👥 ইউজার: {len(db_data.get('users', {}))}\n" \
+                        # ১. সাধারণ রিপ্লাই (বট যে কাজ করছে সেটা বুঝার জন্য)
+                        if lower_text in ["/start", "hi", "hello", "হ্যালো", "হাই"]:
+                            welcome_msg = f"হ্যালো <b>{first_name}</b>! 👋\nআমি Boigram System Bot. আমি সফলভাবে কাজ করছি এবং অনলাইনে আছি! 🚀"
+                            
+                            # যদি অ্যাডমিন এই মেসেজ দেয়, তবে সাথে অ্যাডমিন কমান্ডগুলোও দেখিয়ে দিবে
+                            if chat_id == str(TELEGRAM_ADMIN_CHAT_ID):
+                                welcome_msg += "\n\n<b>অ্যাডমিন কমান্ডস:</b>\n/stats - পরিসংখ্যান\n/pending_books - অপেক্ষমান বই"
+                            
+                            send_telegram_message(welcome_msg, chat_id=chat_id)
+                            
+                        # ২. শুধুমাত্র অ্যাডমিন কমান্ডস
+                        elif chat_id == str(TELEGRAM_ADMIN_CHAT_ID):
+                            if lower_text == "/stats":
+                                stats = f"📊 ইউজার: {len(db_data.get('users', {}))}\n" \
                                         f"✍️ রাইটার: {len(db_data.get('writers', {}))}\n" \
                                         f"📢 অ্যাফিলিয়েট: {len(db_data.get('affiliates', {}))}\n" \
                                         f"📚 মোট বই: {len(db_data.get('books', {}))}"
-                                send_telegram_message(stats)
-                            elif text == "/pending_books":
+                                send_telegram_message(stats, chat_id=chat_id)
+                            elif lower_text == "/pending_books":
                                 pending = [b for b in db_data.get('books', {}).values() if b.get('status') == 'pending']
-                                send_telegram_message(f"অ্যাপ্রুভালের অপেক্ষায় বই আছে: {len(pending)} টি।")
+                                send_telegram_message(f"অ্যাপ্রুভালের অপেক্ষায় বই আছে: {len(pending)} টি।", chat_id=chat_id)
         except:
             time.sleep(5)
         time.sleep(2)
@@ -224,7 +227,7 @@ def login():
             else:
                 return jsonify({"message": "ভুল পাসওয়ার্ড!"}), 401
                 
-    return jsonify({"message": "অ্যাকাউন্ট খুঁজে পাওয়া যায়নি!"}), 404
+    return jsonify({"message": "অ্যাকাউন্ট খুঁজে পাওয়া যায়নি!"}), 404
 
 @app.route('/api/auth/verify', methods=['GET'])
 def verify_token():
@@ -244,7 +247,6 @@ def verify_token():
 @app.route('/api/auth/reset_password', methods=['POST'])
 def reset_password():
     email = request.json.get('email')
-    # বাস্তব সিস্টেমে এখানে ইমেইল পাঠানো হয়। ডেমোর জন্য শুধু সাকসেস মেসেজ।
     return jsonify({"message": f"Password reset link sent to {email}"})
 
 @app.route('/api/auth/logout', methods=['POST'])
@@ -273,7 +275,6 @@ def db_get():
                 filtered_data[key] = val
         data = filtered_data
         
-    # Python dicts are ordered in 3.7+, simple limit slice
     if isinstance(data, dict) and limit_last:
         try:
             limit = int(limit_last)
@@ -298,10 +299,8 @@ def db_push():
     path = payload.get('path', '')
     data = payload.get('data', {})
     
-    # Generate Firebase-like push key
     new_key = "-M" + str(int(time.time() * 1000)) + str(uuid.uuid4())[:8]
     
-    # Process timestamps if any
     if isinstance(data, dict):
         for k, v in data.items():
             if v == "{TIMESTAMP}":
@@ -314,9 +313,9 @@ def db_push():
     if "books" in path and data.get('status') == 'pending':
         send_telegram_message(f"📚 <b>নতুন বই আপলোড!</b>\nবইয়ের নাম: {data.get('title')}\nঅ্যাপ্রুভালের অপেক্ষায়।")
     elif "withdrawRequests" in path:
-        send_telegram_message(f"💸 <b>নতুন উইথড্র রিকোয়েস্ট!</b>\nপরিমাণ: {data.get('amount')}৳\nমেথড: {data.get('method')}")
+        send_telegram_message(f"💸 <b>নতুন উইথড্র রিকোয়েস্ট!</b>\nপরিমাণ: {data.get('amount')}৳\nমেথড: {data.get('method')}")
     elif "depositRequests" in path:
-        send_telegram_message(f"💰 <b>নতুন ডিপোজিট রিকোয়েস্ট!</b>\nপরিমাণ: {data.get('amount')}৳\nTrxID: {data.get('trxId')}")
+        send_telegram_message(f"💰 <b>নতুন ডিপোজিট রিকোয়েস্ট!</b>\nপরিমাণ: {data.get('amount')}৳\nTrxID: {data.get('trxId')}")
     elif "reports" in path:
         send_telegram_message(f"🚩 <b>নতুন রিপোর্ট!</b>\nসমস্যা: {data.get('issue', data.get('message', ''))}")
 
@@ -336,7 +335,6 @@ def db_update_root():
     payload = request.json
     updates = payload.get('updates', {})
     
-    # updates dictionary looks like {"path/to/node": value, "path2/to/node": value}
     with db_lock:
         for path_str, value in updates.items():
             keys = path_str.strip('/').split('/')
