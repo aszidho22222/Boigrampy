@@ -232,6 +232,23 @@ def db_remove():
         return jsonify({"message": "Removed"})
     except Exception as e: return jsonify({"message": str(e)}), 400
 
+# ====================================================================
+# ৫. SYSTEM ROUTES (NEW)
+# ====================================================================
+
+@app.route('/')
+def home():
+    return jsonify({
+        "status": "success",
+        "message": "Boigram API is running perfectly!",
+        "version": "1.0.0"
+    }), 200
+
+@app.route('/favicon.ico')
+def favicon():
+    # ব্রাউজার ফেভিকন খুঁজলে 404 এরর লগ এড়াতে এটি খালি রেসপন্স পাঠাবে
+    return "", 204
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
